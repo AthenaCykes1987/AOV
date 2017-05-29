@@ -290,8 +290,7 @@ def ooc_cmd_pos(client, arg):
 
 def ooc_cmd_bg(client, arg):
     if len(arg) == 0:
-        client.send_host_message('The current background is {}.'.format(client.area.background))
-        raise ArgumentError('To change the background, use /bg <background>.')
+        raise ArgumentError('You must specify a name. Use /bg <background>.')
     if not client.is_mod and client.area.bg_lock == "true":
         raise AreaError("This area's background is locked")
     try:
@@ -313,6 +312,13 @@ def ooc_cmd_bglock(client,arg):
     client.area.send_host_message('A mod has set the background lock to {}.'.format(client.area.bg_lock))
     logger.log_server('[{}][{}]Changed bglock to {}'.format(client.area.id, client.get_char_name(), client.area.bg_lock), client)
 
+def ooc_cmd_bglist(client, arg):
+    bgs = 'Available backgrounds:'
+
+    for bg in client.server.backgrounds:
+        bgs += '\r\n' + bg
+
+    client.send_host_message(bgs)
 
 def ooc_cmd_motd(client, arg):
     if len(arg) != 0:
@@ -367,7 +373,7 @@ def ooc_cmd_login(client, arg):
     logger.log_server('Logged in as moderator.', client)
     client.in_rp = False
 
-	
+
 def ooc_cmd_kick(client, arg):
     if not client.is_mod:
         raise ClientError('You must be authorized to do that.')
@@ -411,7 +417,6 @@ def ooc_cmd_unban(client, arg):
         client.server.ban_manager.remove_ban(ip)
     except ServerError:
         raise
-    client.send_host_message('Removed {} from the banlist.'.format(ip))
     logger.log_server('Unbanned {}.'.format(ip), client)
 
 def ooc_cmd_play(client, arg):
@@ -457,8 +462,11 @@ def ooc_cmd_unmute(client, arg):
         client.send_host_message('Unmuted {} existing client(s).'.format(len(targets)))
     else:
         client.send_host_message("No targets found.")
-		
+
 def ooc_cmd_rpmode(p_client, arg):
+    if not p_client.server.config['rp_mode_enabled']:
+        p_client.send_host_message("RP mode is disabled in this server!")
+        return
     if not p_client.is_mod:
         raise ClientError('You must be authorized to do that.')
     if len(arg) == 0:
@@ -476,4 +484,60 @@ def ooc_cmd_rpmode(p_client, arg):
             i_client.in_rp = False
     else:
         p_client.send_host_message('Invalid argument! Valid arguments: on, off. Your argument: ' + arg)
-		
+
+def ooc_cmd_lock(client, arg):
+    if not client.server.config['area_locking_enabled']:
+        client.send_host_message('Area locking is disabled in this server!')
+        return
+    if client.area.id == 0:
+        client.send_host_message('You can\'t lock area 0!')
+        return
+    client.area.is_locked = True
+    client.area.current_locker = client
+    client.area.send_host_message('Area locked!')
+
+def ooc_cmd_unlock(client, arg):
+    if client.area.current_locker is client:
+        client.area.is_locked = False
+        client.send_host_message('Area unlocked!')
+    else:
+        client.send_host_message('You did not lock this area!')
+
+def ooc_cmd_record(client, arg):
+    if len(arg) == 0:
+        client.send_host_message("This command takes one argument(start/stop/play)")
+        return
+
+    if arg == "start":
+        if (client.area.is_recording):
+            client.send_host_message("This area is already recording!")
+        else:
+            client.area.is_recording = True
+            client.area.recorded_messages = []
+            client.send_host_message("Recording started!")
+    elif arg == "stop":
+        if not (client.area.is_recording):
+            client.send_host_message("This area is not recording.")
+        else:
+            client.area.is_recording = False
+            client.send_host_message("Recording stopped!")
+    elif arg == "play":
+        if client.area.is_recording:
+            client.send_host_message("You can\'t play a recording when recording!")
+
+        elif len(client.area.recorded_messages) <= 0:
+            client.area.send_host_message("Record is empty!")
+        else:
+            client.area.play_recording()
+    else:
+        client.send_host_message("Invalid argument! (start/stop/play)")
+
+    
+
+
+
+    
+
+
+
+

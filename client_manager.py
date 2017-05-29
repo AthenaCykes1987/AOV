@@ -21,6 +21,7 @@ from server.exceptions import ClientError, AreaError
 
 import time
 
+
 class ClientManager:
     class Client:
         def __init__(self, server, transport, user_id):
@@ -36,9 +37,9 @@ class ClientManager:
             self.muted_global = False
             self.muted_adverts = False
             self.is_muted = False
-            self.in_rp = False
             self.mod_call_time = 0
-			
+            self.in_rp = False
+
         def send_raw_message(self, msg):
             self.transport.write(msg.encode('utf-8'))
 
@@ -77,28 +78,31 @@ class ClientManager:
         def change_area(self, area):
             if self.area == area:
                 raise ClientError('You are already in this area.')
+            if area.is_locked and not self.is_mod:
+                self.send_host_message("That area is locked!")
+                return
             old_area = self.area
             if not area.is_char_available(self.char_id):
                 try:
                     new_char_id = area.get_rand_avail_char_id()
                 except AreaError:
                     raise ClientError('No available characters in that area.')
-                self.area.remove_client(self)
-                self.area = area
-                area.new_client(self)
+
                 self.change_character(new_char_id)
                 self.send_host_message('Character taken, switched to {}.'.format(self.get_char_name()))
-            else:
-                self.area.remove_client(self)
-                self.area = area
-                area.new_client(self)
-            self.send_host_message('Changed area to {}.'.format(area.name))
+
+            self.area.remove_client(self)
+            self.area = area
+            area.new_client(self)
+
+            self.send_host_message('Changed area to {}.[{}]'.format(area.name, self.area.status))
             logger.log_server(
                 '[{}]Changed area from {} ({}) to {} ({}).'.format(self.get_char_name(), old_area.name, old_area.id,
                                                                    self.area.name, self.area.id), self)
             self.send_command('HP', 1, self.area.hp_def)
             self.send_command('HP', 2, self.area.hp_pro)
             self.send_command('BN', self.area.background)
+            self.send_command('LE', *self.area.get_evidence_list())
 
         def send_area_list(self):
             msg = '=== Areas ==='
@@ -107,6 +111,8 @@ class ClientManager:
                 if self.area == area:
                     msg += ' [*]'
                 msg += '\r\n[{}]'.format(area.status)
+                if area.is_locked:
+                    msg += '[LOCKED]'
             self.send_host_message(msg)
 
         def send_limited_area_list(self):
@@ -141,7 +147,9 @@ class ClientManager:
         def send_all_area_info(self):
             info = '== Area List =='
             for i in range(len(self.server.area_manager.areas)):
-                info += '\r\n{}'.format(self.get_area_info(i))
+                #print(len(i.clients))
+                if len(self.server.area_manager.areas[i].clients) > 0:
+                    info += '\r\n{}'.format(self.get_area_info(i))
             self.send_host_message(info)
 
         def send_done(self):
@@ -153,6 +161,7 @@ class ClientManager:
             self.send_command('HP', 1, self.area.hp_def)
             self.send_command('HP', 2, self.area.hp_pro)
             self.send_command('BN', self.area.background)
+            self.send_command('LE', *self.area.get_evidence_list())
             self.send_command('MM', 1)
             self.send_command('OPPASS', fantacrypt.fanta_encrypt(self.server.config['guardpass']))
             self.send_command('DONE')
@@ -231,3 +240,10 @@ class ClientManager:
         if ooc:
             return ooc
         return None
+
+    def get_muted_clients(self):
+        clients = []
+        for client in self.clients:
+            if client.is_muted:
+                clients.append(client)
+        return clients
